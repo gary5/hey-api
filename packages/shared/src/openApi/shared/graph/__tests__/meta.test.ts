@@ -80,4 +80,35 @@ describe('buildResourceMetadata', () => {
 
     expect(bar?.dependencies.has('parameter/SharedParam')).toBe(false);
   });
+
+  it('collects webhook operations and attributes webhook-level `parameters` $refs', () => {
+    const spec = {
+      components: {
+        parameters: {
+          SharedParam: {
+            in: 'query',
+            name: 'shared',
+            schema: { type: 'string' },
+          },
+        },
+      },
+      paths: {},
+      webhooks: {
+        newPet: {
+          parameters: [{ $ref: '#/components/parameters/SharedParam' }],
+          post: {
+            responses: { '200': { description: 'ok' } },
+          },
+        },
+      },
+    };
+
+    const { graph } = buildGraph(spec, loggerStub);
+    const { resourceMetadata } = buildResourceMetadata(graph, loggerStub);
+
+    const webhookOperation = resourceMetadata.operations.get('operation/POST newPet');
+
+    expect(webhookOperation).toBeDefined();
+    expect(webhookOperation?.dependencies.has('parameter/SharedParam')).toBe(true);
+  });
 });

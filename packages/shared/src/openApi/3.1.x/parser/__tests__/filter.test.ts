@@ -54,4 +54,68 @@ describe('filterSpec', () => {
 
     expect(spec.paths?.['/v1/foo']).toEqual({ $ref: '#/components/pathItems/Foo' });
   });
+
+  it('removes an unselected webhook operation and drops the webhook once empty', () => {
+    const spec = createSpec({});
+    spec.webhooks = {
+      newPet: {
+        post: { responses: { '200': { description: 'ok' } } },
+      },
+    };
+
+    filterSpec({
+      logger: new Logger(),
+      operations: new Set(),
+      parameters: new Set(),
+      preserveOrder: false,
+      requestBodies: new Set(),
+      responses: new Set(),
+      schemas: new Set(),
+      spec,
+    });
+
+    expect(spec.webhooks?.newPet).toBeUndefined();
+  });
+
+  it('keeps a selected webhook operation', () => {
+    const spec = createSpec({});
+    spec.webhooks = {
+      newPet: {
+        post: { responses: { '200': { description: 'ok' } } },
+      },
+    };
+
+    filterSpec({
+      logger: new Logger(),
+      operations: new Set(['operation/POST newPet']),
+      parameters: new Set(),
+      preserveOrder: false,
+      requestBodies: new Set(),
+      responses: new Set(),
+      schemas: new Set(),
+      spec,
+    });
+
+    expect(spec.webhooks?.newPet).toBeDefined();
+  });
+
+  it('does not remove a $ref-only webhook even when it has no direct operations', () => {
+    const spec = createSpec({});
+    spec.webhooks = {
+      newPet: { $ref: '#/components/pathItems/NewPet' },
+    };
+
+    filterSpec({
+      logger: new Logger(),
+      operations: new Set(),
+      parameters: new Set(),
+      preserveOrder: false,
+      requestBodies: new Set(),
+      responses: new Set(),
+      schemas: new Set(),
+      spec,
+    });
+
+    expect(spec.webhooks?.newPet).toEqual({ $ref: '#/components/pathItems/NewPet' });
+  });
 });
