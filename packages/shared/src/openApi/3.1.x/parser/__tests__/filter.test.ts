@@ -118,4 +118,28 @@ describe('filterSpec', () => {
 
     expect(spec.webhooks?.newPet).toEqual({ $ref: '#/components/pathItems/NewPet' });
   });
+
+  it('does not throw on a spec-extension key under webhooks with a primitive value', () => {
+    const spec = createSpec({});
+    spec.webhooks = {
+      newPet: {
+        post: { responses: { '200': { description: 'ok' } } },
+      },
+      'x-foo': 'bar',
+    } as unknown as OpenAPIV3_1.Document['webhooks'];
+
+    expect(() =>
+      filterSpec({
+        logger: new Logger(),
+        operations: new Set(['operation/POST newPet']),
+        parameters: new Set(),
+        preserveOrder: false,
+        requestBodies: new Set(),
+        responses: new Set(),
+        schemas: new Set(),
+        spec,
+      }),
+    ).not.toThrow();
+    expect(spec.webhooks?.['x-foo']).toBe('bar');
+  });
 });
