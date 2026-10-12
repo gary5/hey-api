@@ -12,12 +12,16 @@ function createSpec(paths: OpenAPIV2.Document['paths']): OpenAPIV2.Document {
 }
 
 describe('filterSpec', () => {
-  it('does not throw on a spec-extension key under paths with a primitive value', () => {
+  it('does not throw on a spec-extension key under paths with a null value', () => {
+    // `null` is explicitly a legal extension value per the OpenAPI spec, and
+    // unlike a string/number/boolean it throws on property access too (not
+    // just on `in`), so it exercises the `x-` skip rather than relying on
+    // bracket access happening to tolerate the value.
     const spec = createSpec({
       '/v1/foo': {
         get: { responses: { '200': { description: 'ok' } } },
       },
-      'x-foo': 'bar',
+      'x-foo': null,
     });
 
     expect(() =>
