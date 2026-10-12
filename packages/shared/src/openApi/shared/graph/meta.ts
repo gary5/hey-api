@@ -2,7 +2,7 @@ import type { Logger } from '@hey-api/codegen-core';
 
 import type { Graph } from '../../../graph';
 import { createOperationKey } from '../../../ir/operation';
-import { jsonPointerToPath } from '../../../utils/ref';
+import { jsonPointerToPath, pathToJsonPointer } from '../../../utils/ref';
 import { addNamespace, stringToNamespace } from '../utils/filter';
 import { httpMethods } from '../utils/operation';
 
@@ -87,19 +87,23 @@ export function buildResourceMetadata(
   // Path/webhook-level `parameters` (#/paths/{path}/parameters,
   // #/webhooks/{name}/parameters) are not operation nodes, but their
   // dependencies must be attributed to every operation under that path or
-  // webhook so filtering doesn't treat them as orphans.
-  const pathParameterDependencies = new Map<string, Set<string>>();
-  const webhookParameterDependencies = new Map<string, Set<string>>();
-  for (const pointer of graph.nodes.keys()) {
-    const path = jsonPointerToPath(pointer);
-    if (path.length === 3 && path[2] === 'parameters') {
-      if (path[0] === 'paths') {
-        pathParameterDependencies.set(path[1]!, getDependencies(pointer));
-      } else if (path[0] === 'webhooks') {
-        webhookParameterDependencies.set(path[1]!, getDependencies(pointer));
-      }
+  // webhook so filtering doesn't treat them as orphans. Computed lazily and
+  // cached per path/webhook, since the pointer is derivable directly from
+  // the operation's own path segment — no need to pre-scan every graph node
+  // looking for it, and no need to recompute it for each sibling method.
+  const pathParameterDependenciesCache = new Map<string, Set<string>>();
+  const getPathLevelParameterDependencies = (
+    kind: 'paths' | 'webhooks',
+    name: string,
+  ): Set<string> => {
+    const cacheKey = `${kind}/${name}`;
+    let dependencies = pathParameterDependenciesCache.get(cacheKey);
+    if (!dependencies) {
+      dependencies = getDependencies(pathToJsonPointer([kind, name, 'parameters']));
+      pathParameterDependenciesCache.set(cacheKey, dependencies);
     }
-  }
+    return dependencies;
+  };
 
   // Process each node to find top-level resources
   for (const [pointer, nodeInfo] of graph.nodes) {
@@ -154,7 +158,7 @@ export function buildResourceMetadata(
         resourceMetadata.operations.set(addNamespace('operation', operationKey), {
           dependencies: new Set([
             ...getDependencies(pointer),
-            ...(pathParameterDependencies.get(path[1]!) ?? []),
+            ...getPathLevelParameterDependencies('paths', operationPath),
           ]),
           deprecated: nodeInfo.deprecated ?? false,
           tags: nodeInfo.tags ?? new Set(),
@@ -176,7 +180,7 @@ export function buildResourceMetadata(
         resourceMetadata.operations.set(addNamespace('operation', operationKey), {
           dependencies: new Set([
             ...getDependencies(pointer),
-            ...(webhookParameterDependencies.get(webhookName) ?? []),
+            ...getPathLevelParameterDependencies('webhooks', webhookName),
           ]),
           deprecated: nodeInfo.deprecated ?? false,
           tags: nodeInfo.tags ?? new Set(),
